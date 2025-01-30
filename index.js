@@ -2,8 +2,13 @@ require('dotenv').config();
 const express = require('express');
 const bodyParser = require('body-parser');
 
+const { Camunda8 } = require('@camunda8/sdk');
+
 const app = express();
 const port = 3000;
+
+const c8 = new Camunda8();
+const zbc = c8.getZeebeGrpcApiClient();
 
 app.use(bodyParser.urlencoded({ extended: true }));
 app.get('/', (req, res) => {
@@ -30,7 +35,16 @@ app.get('/', (req, res) => {
 
 app.post('/submit', async (req, res) => {
   const { name, sinistre, city } = req.body;
-  // envoi un email au service sinistre
+  
+  const p = await zbc.createProcessInstance({
+    bpmnProcessId: 'Process_sinistre',
+    variables: {
+      name: name,
+      sinistre: sinistre,
+      city: city
+    }
+  })
+
   res.send(`
     <p>Merci ${name} ! Nous reviendrons vers toi dès que nous aurons trouvé un expert ${sinistre} dans la ville de ${city}</p>
     <a href="/">Retour au formulaire</a>
@@ -40,3 +54,17 @@ app.post('/submit', async (req, res) => {
 app.listen(port, () => {
   console.log(`Server is running on http://localhost:${port}`);
 });
+
+const worker = zbc.createWorker({
+    taskType: 'find-expert',
+    taskHandler: async (job, complete) => {
+      const { sinistre, city } = job.variables;
+      console.log(`Recherche d'un expert ${sinistre} à ${city}`);
+      console.log("c'est terminé!");
+      return job.complete({
+        whereIsTheExpert: "Expert trouvé!",
+        expert: "Jean Dupont",
+        expertemail: "xx"
+      });
+    }
+  });
